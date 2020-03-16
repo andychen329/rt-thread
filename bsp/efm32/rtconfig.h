@@ -35,6 +35,7 @@
 
 /* SECTION: RT_DEBUG */
 #define RT_DEBUG
+#define RT_DEBUG_COLOR
 //#define RT_DEBUG_MEM 				(1)
 //#define RT_DEBUG_SCHEDULER 			(1)
 //#define RT_DEBUG_IPC 				(1)
@@ -293,8 +294,6 @@
 //#define RT_USING_LWIP
 //#define RT_USING_NETUTILS
 //#define RT_LWIP_DHCP
-/* LwIP uses RT-Thread Memory Management */
-#define RT_LWIP_USING_RT_MEM
 /* Enable ICMP protocol*/
 #define RT_LWIP_ICMP
 /* Enable ICMP protocol*/

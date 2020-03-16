@@ -1,16 +1,34 @@
 /*
- * File      : sys_arch.c
- * This file is part of RT-Thread RTOS
- * COPYRIGHT (C) 2012, RT-Thread Development Team
+ * COPYRIGHT (C) 2006-2018, RT-Thread Development Team
+ * All rights reserved.
  *
- * The license and distribution terms for this file may be
- * found in the file LICENSE in this distribution or at
- * http://www.rt-thread.org/license/LICENSE
+ * Redistribution and use in source and binary forms, with or without modification,
+ * are permitted provided that the following conditions are met:
+ *
+ * 1. Redistributions of source code must retain the above copyright notice,
+ *    this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright notice,
+ *    this list of conditions and the following disclaimer in the documentation
+ *    and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote products
+ *    derived from this software without specific prior written permission.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS OR IMPLIED
+ * WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+ * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT
+ * SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+ * EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT
+ * OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING
+ * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY
+ * OF SUCH DAMAGE.
  *
  * Change Logs:
  * Date           Author       Notes
  * 2012-12-8      Bernard      add file header
- *                             export bsd socket symbol for RT-Thread Application Module 
+ *                             export bsd socket symbol for RT-Thread Application Module
+ * 2017-11-15     Bernard      add lock for init_done callback.
  */
 
 #include <rtthread.h>
@@ -28,6 +46,7 @@
 #include "lwip/sio.h"
 #include "lwip/init.h"
 #include "lwip/dhcp.h"
+#include "lwip/inet.h"
 
 #include <string.h>
 
@@ -67,12 +86,10 @@ static void tcpip_init_done_callback(void *arg)
 {
     rt_device_t device;
     struct eth_device *ethif;
-    ip_addr_t ipaddr, netmask, gw;
+    ip4_addr_t ipaddr, netmask, gw;
     struct rt_list_node* node;
     struct rt_object* object;
     struct rt_object_information *information;
-
-    extern struct rt_object_information rt_object_container[];
 
     LWIP_ASSERT("invalid arg.\n",arg);
 
@@ -84,7 +101,8 @@ static void tcpip_init_done_callback(void *arg)
     rt_enter_critical();
 
     /* for each network interfaces */
-    information = &rt_object_container[RT_Object_Class_Device];
+    information = rt_object_get_information(RT_Object_Class_Device);
+    RT_ASSERT(information != RT_NULL);
     for (node = information->object_list.next;
          node != &(information->object_list);
          node = node->next)
@@ -97,6 +115,7 @@ static void tcpip_init_done_callback(void *arg)
 
             /* leave critical */
             rt_exit_critical();
+            LOCK_TCPIP_CORE();
 
             netif_add(ethif->netif, &ipaddr, &netmask, &gw,
                       ethif, netif_device_init, tcpip_input);
@@ -119,6 +138,7 @@ static void tcpip_init_done_callback(void *arg)
                 netif_set_link_up(ethif->netif);
             }
 
+            UNLOCK_TCPIP_CORE();
             /* enter critical */
             rt_enter_critical();
         }
@@ -132,10 +152,20 @@ static void tcpip_init_done_callback(void *arg)
 /**
  * LwIP system initialization
  */
+extern int eth_system_device_init_private(void);
 int lwip_system_init(void)
 {
     rt_err_t rc;
     struct rt_semaphore done_sem;
+    static rt_bool_t init_ok = RT_FALSE;
+
+    if (init_ok)
+    {
+        rt_kprintf("lwip system already init.\n");
+        return 0;
+    }
+
+    eth_system_device_init_private();
 
     /* set default netif to NULL */
     netif_default = RT_NULL;
@@ -166,18 +196,20 @@ int lwip_system_init(void)
     {
         struct ip4_addr ipaddr, netmask, gw;
 
-        IP4_ADDR(&ipaddr, RT_LWIP_IPADDR0, RT_LWIP_IPADDR1, RT_LWIP_IPADDR2, RT_LWIP_IPADDR3);
-        IP4_ADDR(&gw, RT_LWIP_GWADDR0, RT_LWIP_GWADDR1, RT_LWIP_GWADDR2, RT_LWIP_GWADDR3);
-        IP4_ADDR(&netmask, RT_LWIP_MSKADDR0, RT_LWIP_MSKADDR1, RT_LWIP_MSKADDR2, RT_LWIP_MSKADDR3);
+        ipaddr.addr = inet_addr(RT_LWIP_IPADDR);
+        gw.addr = inet_addr(RT_LWIP_GWADDR);
+        netmask.addr = inet_addr(RT_LWIP_MSKADDR);
 
         netifapi_netif_set_addr(netif_default, &ipaddr, &netmask, &gw);
     }
 #endif
-	rt_kprintf("lwIP-%d.%d.%d initialized!\n", LWIP_VERSION_MAJOR, LWIP_VERSION_MINOR, LWIP_VERSION_REVISION);
+    rt_kprintf("lwIP-%d.%d.%d initialized!\n", LWIP_VERSION_MAJOR, LWIP_VERSION_MINOR, LWIP_VERSION_REVISION);
 
-	return 0;
+    init_ok = RT_TRUE;
+
+    return 0;
 }
-//INIT_COMPONENT_EXPORT(lwip_system_init);
+INIT_PREV_EXPORT(lwip_system_init);
 
 void sys_init(void)
 {
@@ -238,7 +270,7 @@ void sys_sem_signal(sys_sem_t *sem)
  *
  * @return If the timeout argument is non-zero, it will return the number of milliseconds
  *         spent waiting for the semaphore to be signaled; If the semaphore isn't signaled
- *         within the specified time, it will return SYS_ARCH_TIMEOUT; If the thread doesn't 
+ *         within the specified time, it will return SYS_ARCH_TIMEOUT; If the thread doesn't
  *         wait for the semaphore, it will return zero
  */
 u32_t sys_arch_sem_wait(sys_sem_t *sem, u32_t timeout)
@@ -476,13 +508,10 @@ u32_t sys_arch_mbox_fetch(sys_mbox_t *mbox, void **msg, u32_t timeout)
             t = timeout / (1000/RT_TICK_PER_SECOND);
     }
 
-    ret = rt_mb_recv(*mbox, (rt_uint32_t *)msg, t);
-
-    if(ret == -RT_ETIMEOUT)
-        return SYS_ARCH_TIMEOUT;
-    else
+    ret = rt_mb_recv(*mbox, (rt_ubase_t *)msg, t);
+    if(ret != RT_EOK)
     {
-        LWIP_ASSERT("rt_mb_recv returned with error!", ret == RT_EOK);
+        return SYS_ARCH_TIMEOUT;
     }
 
     /* get elapse msecond */
@@ -507,13 +536,13 @@ u32_t sys_arch_mbox_tryfetch(sys_mbox_t *mbox, void **msg)
 {
     int ret;
 
-    ret = rt_mb_recv(*mbox, (rt_uint32_t *)msg, 0);
+    ret = rt_mb_recv(*mbox, (rt_ubase_t *)msg, 0);
 
     if(ret == -RT_ETIMEOUT)
         return SYS_ARCH_TIMEOUT;
     else
     {
-        if (ret == RT_EOK) 
+        if (ret == RT_EOK)
             ret = 1;
     }
 
@@ -602,7 +631,7 @@ u32_t sys_now(void)
 }
 
 
-WEAK
+RT_WEAK
 void mem_init(void)
 {
 }

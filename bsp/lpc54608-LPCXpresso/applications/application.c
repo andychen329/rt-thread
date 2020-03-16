@@ -1,20 +1,7 @@
 /*
- * File      : application.c
- * COPYRIGHT (C) 2006 - 2017, RT-Thread Development Team
+ * Copyright (c) 2006-2018, RT-Thread Development Team
  *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License along
- *  with this program; if not, write to the Free Software Foundation, Inc.,
- *  51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
@@ -25,10 +12,6 @@
 #ifdef RT_USING_FINSH
 #include <shell.h>
 #include <finsh.h>
-#endif
-
-#ifdef RT_USING_COMPONENTS_INIT
-#include <components.h>
 #endif
 
 /* thread phase init */
@@ -42,9 +25,47 @@ void rt_init_thread_entry(void *parameter)
 #endif
 }
 
+void build_dump(void)
+{
+#if    defined(__CC_ARM)
+    rt_kprintf("using MDK\n");
+#elif  defined(__IAR_SYSTEMS_ICC__)
+    rt_kprintf("using IAR\n");
+#elif  defined(__GNUC__)
+    rt_kprintf("using GCC\n");
+#else
+    rt_kprintf("unkown Compiler\n");
+#endif
+}
+
+void link_dump(void)
+{
+#ifdef __GNUC__
+    extern unsigned int _sdata;
+    extern unsigned int _edata;
+    extern unsigned int _sidata;
+
+    extern unsigned int _sbss;
+    extern unsigned int _ebss;
+    
+    #define DUMP_VAR(__VAR) \
+        rt_kprintf("%-20s %p\n", #__VAR, &__VAR)
+    
+    DUMP_VAR(_sdata);
+    DUMP_VAR(_edata);
+    DUMP_VAR(_sidata);
+    DUMP_VAR(_sbss);
+    DUMP_VAR(_ebss);
+#endif
+}
+
 int rt_application_init(void)
 {
     rt_thread_t tid;
+    
+    build_dump();
+    link_dump();
+    
     tid = rt_thread_create("init",
                            rt_init_thread_entry, RT_NULL,
                            2048, RT_THREAD_PRIORITY_MAX / 3, 20);

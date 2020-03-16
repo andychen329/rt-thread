@@ -1,11 +1,7 @@
 /*
- * File      : board.h
- * This file is part of RT-Thread RTOS
- * COPYRIGHT (C) 2009, RT-Thread Development Team
+ * Copyright (c) 2006-2018, RT-Thread Development Team
  *
- * The license and distribution terms for this file may be
- * found in the file LICENSE in this distribution or at
- * http://www.rt-thread.org/license/LICENSE
+ * SPDX-License-Identifier: Apache-2.0
  *
  * Change Logs:
  * Date           Author       Notes
@@ -23,11 +19,6 @@
 
 #include <rtthread.h>
 
-/* disable SDRAM in default */
-#ifndef LPC_EXT_SDRAM
-#define LPC_EXT_SDRAM       1
-#endif
-
 // <RDTConfigurator URL="http://www.rt-thread.com/eclipse">
 
 // <integer name="LPC_EXT_SDRAM" description="Begin Address of External SDRAM" default="0xA0000000" />
@@ -35,20 +26,12 @@
 // <integer name="LPC_EXT_SDRAM_END" description="End Address of External SDRAM" default="0xA2000000" />
 #define LPC_EXT_SDRAM_END      0xA0800000
 
-// <bool name="RT_USING_UART0" description="Using UART0" default="true" />
-#define RT_USING_UART0
-// <bool name="RT_USING_UART1" description="Using UART1" default="true" />
-//#define RT_USING_UART1
-// <bool name="RT_USING_UART2" description="Using UART2" default="true" />
-//#define RT_USING_UART2
-// <string name="RT_CONSOLE_DEVICE_NAME" description="The name of console device" default="" />
-#define RT_CONSOLE_DEVICE_NAME  "uart0"
 
 // </RDTConfigurator>
 
 #ifdef __CC_ARM
-extern int Image$$ARM_LIB_STACK$$ZI$$Limit;
-#define HEAP_BEGIN  ((void *)&Image$$ARM_LIB_STACK$$ZI$$Limit)
+extern int Image$$RTT_HEAP$$ZI$$Base;
+#define HEAP_BEGIN  ((void *)&Image$$RTT_HEAP$$ZI$$Base)
 #elif __ICCARM__
 #pragma section="HEAP"
 #define HEAP_BEGIN  (__segment_end("HEAP"))
